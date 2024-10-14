@@ -1,0 +1,221 @@
+using De01.Model;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Data.SqlClient;
+using System.Drawing;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.Remoting.Contexts;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace De01
+{
+    public partial class frmSinhvien : Form
+    {
+        SinhVienModel context = new SinhVienModel();
+        //private string connectionString = "Server=DESKTOP-FU8A9KL\\SQLEXPRESS;Database=QuanlySV;Trusted_Connection=True;";
+        public frmSinhvien()
+        {
+            InitializeComponent();
+        }
+
+        private void frmSinhvien_Load(object sender, EventArgs e)
+        {
+            LoadDuLieuSinhVien();
+            LoadDuLieuLop();
+        }
+        private void LoadDuLieuSinhVien()
+        {
+            using (var context = new SinhVienModel())
+            {
+                // Lấy danh sách sinh viên, bao gồm cả thông tin lớp
+                var studentList = context.Sinhvien
+                    .Select(s => new
+                    {
+                        MaSV = s.MaSV,
+                        HotenSV = s.HotenSV,
+                        MaLop = s.MaLop,
+                        TenLop = s.Lop.TenLop,  // Lấy ra tên lớp từ đối tượng Lop
+                        Ngaysinh = s.Ngaysinh
+                    })
+                    .ToList();
+
+                dataSinhvien.DataSource = studentList;
+            }
+        }
+        private void LoadDuLieuLop()
+        {
+            try
+            {
+                var lopList = context.Lop.ToList();
+                cboLop.DataSource = lopList;
+                cboLop.DisplayMember = "TenLop";
+                cboLop.ValueMember = "MaLop";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi khi tải danh sách lớp: " + ex.Message);
+            }
+        }
+        private void dataSinhvien_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex >= 0)
+            {
+                DataGridViewRow row = dataSinhvien.Rows[e.RowIndex];
+
+                txtMaSV.Text = row.Cells["MaSV"].Value.ToString();
+                txtHotenSV.Text = row.Cells["HotenSV"].Value.ToString();
+                dtNgaysinh.Value = Convert.ToDateTime(row.Cells["Ngaysinh"].Value);
+
+                string maLop = row.Cells["MaLop"].Value.ToString();
+                cboLop.SelectedValue = maLop;
+            }
+        }
+        private bool KiemTraDauVao()
+        {
+            if (string.IsNullOrWhiteSpace(txtMaSV.Text) ||
+                string.IsNullOrWhiteSpace(txtHotenSV.Text) ||
+                cboLop.SelectedItem == null)
+            {
+                MessageBox.Show("Vui lòng điền đầy đủ thông tin.", "Lỗi xác thực", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+            return true;
+        }
+        private void btThem_Click(object sender, EventArgs e)
+        {
+            using (var context = new SinhVienModel())
+            {
+                var student = new Sinhvien
+                {
+                    MaSV = txtMaSV.Text,
+                    HotenSV = txtHotenSV.Text,
+                    MaLop = cboLop.SelectedValue.ToString(),
+                    Ngaysinh = dtNgaysinh.Value
+                };
+
+                context.Sinhvien.Add(student);
+                context.SaveChanges();
+            }
+            LoadDuLieuSinhVien();
+            MessageBox.Show("Thêm sinh viên thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void btXoa_Click(object sender, EventArgs e)
+        {
+            if (dataSinhvien.SelectedRows.Count > 0)
+            {
+                DialogResult result = MessageBox.Show("Bạn có chắc chắn muốn xóa sinh viên này?", "Xác nhận xóa", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+                if (result == DialogResult.Yes)
+                {
+                    string selectedMaSV = dataSinhvien.SelectedRows[0].Cells["MaSV"].Value.ToString();
+
+                    using (var context = new SinhVienModel())
+                    {
+                        var student = context.Sinhvien.SingleOrDefault(s => s.MaSV == selectedMaSV);
+
+                        if (student != null)
+                        {
+                            context.Sinhvien.Remove(student);
+                            context.SaveChanges();
+                            MessageBox.Show("Xóa sinh viên thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                    }
+
+                    LoadDuLieuSinhVien(); 
+                }
+                else
+                {
+
+                    MessageBox.Show("Hành động xóa đã bị hủy.", "Hủy bỏ", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            else
+            {
+                MessageBox.Show("Vui lòng chọn một sinh viên để xóa.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void btSua_Click(object sender, EventArgs e)
+        {
+            
+            if (dataSinhvien.SelectedRows.Count > 0)
+            {
+                // Lấy mã sinh viên từ dòng được chọn
+                string selectedMaSV = dataSinhvien.SelectedRows[0].Cells["MaSV"].Value.ToString();
+
+                // Kiểm tra đầu vào có hợp lệ không
+                if (!KiemTraDauVao()) return;
+
+                using (var context = new SinhVienModel())
+                {
+                    // Tìm sinh viên cần sửa trong cơ sở dữ liệu
+                    var student = context.Sinhvien.SingleOrDefault(s => s.MaSV == selectedMaSV);
+
+                    if (student != null)
+                    {
+                        // Cập nhật thông tin sinh viên từ các trường trên form
+                        student.HotenSV = txtHotenSV.Text;
+                        student.MaLop = cboLop.SelectedValue.ToString();
+                        student.Ngaysinh = dtNgaysinh.Value;
+
+                        // Lưu thay đổi vào cơ sở dữ liệu
+                        context.SaveChanges();
+
+                        // Thông báo sửa thành công
+                        MessageBox.Show("Cập nhật sinh viên thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                        // Tải lại dữ liệu sinh viên sau khi sửa
+                        LoadDuLieuSinhVien();
+                    }
+                    else
+                    {
+                        MessageBox.Show("Không tìm thấy sinh viên để cập nhật.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+            else
+            {
+                MessageBox.Show("Vui lòng chọn một sinh viên để sửa.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+
+        private void btLuu_Click(object sender, EventArgs e)
+        {
+          
+        }
+
+        private void btThoat_Click(object sender, EventArgs e)
+        {
+            DialogResult result = MessageBox.Show("Bạn có chắc chắn muốn thoát chương trình?", "Xác nhận thoát", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+            if (result == DialogResult.Yes)
+            {
+                this.Close();  
+            }
+            else
+            {
+                MessageBox.Show("Hành động thoát đã bị hủy.", "Hủy bỏ", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private void btTim_Click(object sender, EventArgs e)
+        {
+            string searchName = txtTim.Text;
+
+            using (var context = new SinhVienModel())
+            {
+                var studentList = context.Sinhvien
+                                         .Where(s => s.HotenSV.Contains(searchName))
+                                         .ToList();
+                dataSinhvien.DataSource = studentList;
+            }
+        }
+    }
+}
